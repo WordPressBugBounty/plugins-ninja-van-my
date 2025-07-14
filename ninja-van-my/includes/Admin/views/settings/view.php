@@ -102,7 +102,7 @@ if ($store_default_country == 'MY') {
             <a href="#address" class="nav-tab" data-tab="address"><?php echo esc_html__('Pickup Address', 'ninja-van-my'); ?></a>
             <a href="#misc" class="nav-tab" data-tab="misc"><?php echo esc_html__('Miscellaneous', 'ninja-van-my'); ?></a>
             <a href="#history" class="nav-tab" data-tab="history"><?php echo esc_html__('Order History', 'ninja-van-my'); ?></a>
-            <a href="#debug" class="nav-tab" data-tab="debug"><?php echo esc_html__('Debug', 'ninja-van-my'); ?></a>
+            <a href="#debug" class="nav-tab" data-tab="debug" style="<?php echo (Ninja_Van_MY_DEVELOPMENT ? '' : 'display:none;'); ?>"><?php echo esc_html__('Debug', 'ninja-van-my'); ?></a>
         </h2>
         <!-- General Table -->
         <div class="ninja_van_form ninja_van_form_mw" id="form-general">

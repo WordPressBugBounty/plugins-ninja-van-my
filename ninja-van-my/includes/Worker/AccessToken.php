@@ -336,8 +336,10 @@
          * @scope Plugin API
          */
         public function logout(){
-            $url = $this->url.$this->endpoints['PLUGIN']['logout'];
+            $this->disconnect();
 
+            $url = $this->url.$this->endpoints['PLUGIN']['logout'];
+            
             $access_token = (object) $this->get_access_token();
 
             if (!$access_token->status) {
@@ -371,8 +373,6 @@
                     'token' => null,
                 ];
             }
-
-            $this->disconnect();
 
             return [
                 'status' => true,

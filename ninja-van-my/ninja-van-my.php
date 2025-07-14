@@ -3,7 +3,7 @@
  * Plugin Name: Ninja Van (MY)
  * Plugin URI: https://sites.google.com/ninjavan.co/woocommerce/
  * Description: Easily connect your WooCommerce store to your Ninja Van Dashboard for automatic tracking order creation and updates — no manual entry required!
- * Version: 1.1.5
+ * Version: 1.1.6
  * Author: Ninja Van Logistics Sdn Bhd
  * Author URI: https://www.ninjavan.co/
  * Text Domain: ninja-van-my
@@ -24,7 +24,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 final class Ninja_Van_MY {
 
-    CONST version = '1.1.5';
+    CONST version = '1.1.6';
 
     private function __construct() {
         if ( !in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', get_option( 'active_plugins' ) ) ) ) {

@@ -4,7 +4,7 @@ Tags: ninja van, ninjavan
 Requires at least: 5.6
 Tested up to: 6.6.1
 Requires PHP: 7.2
-Stable tag: 1.1.5
+Stable tag: 1.1.6
 License: GPL-3.0-or-later
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -156,6 +156,11 @@ Bug Updates
 * Fixes international order's parcel job item value not converted into the appropriate currency
 * Fixes OAuth mode reverted to legacy on save
 * Fixes very long order message on Order column with an updated view
+
+= 1.1.6 =
+### Changes
+* Fixes unable to logout when access token expires
+* Small UI error
 
 == Screenshots ==
 
