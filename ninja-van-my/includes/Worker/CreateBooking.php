@@ -336,6 +336,8 @@
 
                 $prepare['customs_declaration'] = [
                     'goods_currency' => nv_my_currency($address->country),
+                    'battery_present' => false,
+                    'liquid_present' => false,
                 ];
                 
                 $order_items = nv_my_get_order_items_data($order);
