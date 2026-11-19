@@ -4,7 +4,7 @@ Tags: ninja van, ninjavan
 Requires at least: 5.6
 Tested up to: 6.6.1
 Requires PHP: 7.2
-Stable tag: 1.1.7
+Stable tag: 1.1.8
 License: GPL-3.0-or-later
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -165,6 +165,12 @@ Bug Updates
 = 1.1.7 =
 ### Changes
 * Added `battery_present` and `liquid_present` fields to customs declaration for international orders (API 4.2 compliance)
+
+= 1.1.8 =
+### Changes
+* Fixes the Ninja Van connection dropping right after login on sites with a misconfigured object cache (such as Redis) or with transients suspended by another plugin. Connection tokens are now stored in the database instead of transients
+* Existing connections are moved over automatically. No need to reconnect after updating
+* Fixes the Ninja Van connection expiring after the second background token refresh. The plugin now keeps the new refresh token Ninja Van issues on every refresh
 
 == Screenshots ==
 

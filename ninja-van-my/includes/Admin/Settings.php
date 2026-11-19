@@ -276,11 +276,8 @@
 
             if ($status == true && !empty($client_id) && !empty($client_secret)) {
                 if (get_option('Ninja_Van_WooCommerce_CLIENT_ID') != $client_id || get_option('Ninja_Van_WooCommerce_CLIENT_SECRET') != $client_secret) {
-                    delete_transient('ninja_van_token');
-                    delete_transient('ninja_van_refresh_token');
-                    delete_transient('ninja_van_token_expiry');
-                    delete_transient('ninja_van_token_error');
-                    delete_transient('ninja_van_refresh_token_error');
+                    nv_my_clear_tokens();
+                    nv_my_clear_token_errors();
                 }
 
                 update_option( 'Ninja_Van_WooCommerce_STATUS', true);

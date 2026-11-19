@@ -18,6 +18,7 @@
         }
 
         $settings = nv_my_get_settings();
+        $tokens = nv_my_get_tokens();
         $configs = [
             'status' => nv_my_get_config('status'),
             'type' => nv_my_get_config('type'),
@@ -26,10 +27,10 @@
             'client_secret' => nv_my_get_config('client_secret'),
             'access_code' => nv_my_get_config('access_code'),
             'auth_state' => nv_my_get_config('auth_state'),
-            'access_token' => get_transient('ninja_van_token'),
-            'refresh_token' => get_transient('ninja_van_refresh_token'),
-            'expires_in' => get_transient('ninja_van_token_expiry') ? nv_my_duration(get_transient('ninja_van_token_expiry') - time()) : false,
-            'next_refresh' => get_transient('ninja_van_token_expiry') ? gmdate('Y-m-d H:i:s', get_transient('ninja_van_token_expiry')) : false,
+            'access_token' => $tokens['access_token'],
+            'refresh_token' => $tokens['refresh_token'],
+            'expires_in' => $tokens['access_expires'] ? nv_my_duration($tokens['access_expires'] - time()) : false,
+            'next_refresh' => $tokens['access_expires'] ? gmdate('Y-m-d H:i:s', $tokens['access_expires']) : false,
             'webhook_events' => nv_my_get_webhook_events()
         ];
         $systems = [
@@ -1898,6 +1899,128 @@
         $url = get_site_url() . '/ninjavan-logout?security='.nv_my_get_webhook_security();
         
         return $url;
+    }
+
+    /**
+     * Connection token storage
+     * Tokens are kept in a non-autoloaded option instead of transients. A transient may disappear at any time
+     * (persistent object caches, plugins that suspend transients), and a lost refresh token forces the merchant to log in again.
+     * @since 1.1.8
+     */
+    function nv_my_default_tokens(){
+        return [
+            'access_token' => '',
+            'access_expires' => 0,
+            'refresh_token' => '',
+            'refresh_expires' => 0,
+        ];
+    }
+
+    function nv_my_get_tokens(){
+        $tokens = get_option(Ninja_Van_MY_TOKENS_OPTION, false);
+
+        if (is_array($tokens)) {
+            return array_merge(nv_my_default_tokens(), $tokens);
+        }
+
+        return array_merge(nv_my_default_tokens(), nv_my_migrate_legacy_tokens());
+    }
+
+    /**
+     * Merge the given fields into the stored tokens
+     */
+    function nv_my_update_tokens($changes = []){
+        $tokens = array_merge(nv_my_get_tokens(), array_intersect_key($changes, nv_my_default_tokens()));
+
+        update_option(Ninja_Van_MY_TOKENS_OPTION, $tokens, false);
+
+        return $tokens;
+    }
+
+    /**
+     * Also removes tokens left by 1.1.7 and earlier, so they are not moved back in on the next read
+     */
+    function nv_my_clear_tokens(){
+        delete_option(Ninja_Van_MY_TOKENS_OPTION);
+        nv_my_delete_legacy_tokens();
+    }
+
+    function nv_my_delete_legacy_tokens(){
+        foreach (['ninja_van_token', 'ninja_van_refresh_token', 'ninja_van_token_expiry', 'ninja_van_token_error', 'ninja_van_refresh_token_error'] as $transient) {
+            delete_transient($transient);
+        }
+    }
+
+    function nv_my_has_valid_access_token($tokens = null){
+        if (!is_array($tokens)) {
+            $tokens = nv_my_get_tokens();
+        }
+
+        return !empty($tokens['access_token']) && time() < ((int) $tokens['access_expires'] - Ninja_Van_MY_TOKEN_REFRESH_BUFFER);
+    }
+
+    function nv_my_has_valid_refresh_token($tokens = null){
+        if (!is_array($tokens)) {
+            $tokens = nv_my_get_tokens();
+        }
+
+        return !empty($tokens['refresh_token']) && time() < (int) $tokens['refresh_expires'];
+    }
+
+    /**
+     * Move tokens saved as transients by version 1.1.7 and earlier into the option, once
+     * Keeps merchants connected through the update
+     */
+    function nv_my_migrate_legacy_tokens(){
+        $refresh_token = get_transient('ninja_van_refresh_token');
+
+        if (!$refresh_token) {
+            return [];
+        }
+
+        // 1.1.7 set the access token expiry and the refresh token lifetime from the same expires_in, at the same time
+        $expires = (int) get_transient('ninja_van_token_expiry');
+
+        $tokens = [
+            'access_token' => (string) get_transient('ninja_van_token'),
+            'access_expires' => $expires,
+            'refresh_token' => (string) $refresh_token,
+            // Without a known expiry, keep the refresh token long enough for the next call to refresh and store fresh expiry times
+            'refresh_expires' => $expires ? $expires : time() + HOUR_IN_SECONDS,
+        ];
+
+        update_option(Ninja_Van_MY_TOKENS_OPTION, $tokens, false);
+        nv_my_delete_legacy_tokens();
+
+        nv_my_log('Connection tokens moved from transients to the ' . Ninja_Van_MY_TOKENS_OPTION . ' option.');
+
+        return $tokens;
+    }
+
+    /**
+     * Connection error messages, shown on the settings page
+     * @param string $type `access` or `refresh`
+     */
+    function nv_my_get_token_error($type){
+        $errors = get_option(Ninja_Van_MY_TOKEN_ERRORS_OPTION, []);
+
+        return (is_array($errors) && !empty($errors[$type])) ? $errors[$type] : false;
+    }
+
+    function nv_my_set_token_error($type, $message){
+        $errors = get_option(Ninja_Van_MY_TOKEN_ERRORS_OPTION, []);
+
+        if (!is_array($errors)) {
+            $errors = [];
+        }
+
+        $errors[$type] = $message;
+
+        update_option(Ninja_Van_MY_TOKEN_ERRORS_OPTION, $errors, false);
+    }
+
+    function nv_my_clear_token_errors(){
+        delete_option(Ninja_Van_MY_TOKEN_ERRORS_OPTION);
     }
 
     function nv_my_token($reset = false){

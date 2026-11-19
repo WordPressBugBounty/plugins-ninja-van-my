@@ -47,10 +47,13 @@ if ($auth_mode == 'PLUGIN') {
 /**
  * If refresh token is available, show it. Otherwise, show error message with link to re-connect
  */
-if ($refresh_token = get_transient('ninja_van_refresh_token')) {
+$tokens = nv_my_get_tokens();
+$refresh_token = nv_my_has_valid_refresh_token($tokens) ? $tokens['refresh_token'] : false;
+
+if ($refresh_token) {
     $refresh_token_text = $refresh_token;
 }else if ($access_code) {
-    $refresh_token_error = get_transient('ninja_van_refresh_token_error');
+    $refresh_token_error = nv_my_get_token_error('refresh');
     $refresh_token_text = ($refresh_token_error) ? $refresh_token_error : "Connection Expired. Please Re-login!";
 } else {
     $refresh_token_text = "";
@@ -62,13 +65,13 @@ if (nv_my_check_cron('ninja_van_refresh_token')) {
     $cron_running = false;
 }
 
-if ($token = get_transient('ninja_van_token')) {
-    $access_token = $token;
+if (nv_my_has_valid_access_token($tokens)) {
+    $access_token = $tokens['access_token'];
 }else{
     $access_token = "Token Not Available!";
 }
 
-if ($expired_at = get_transient('ninja_van_token_expiry')) {
+if ($expired_at = $tokens['access_expires']) {
     $access_token_expired_text = nv_my_gmdate($expired_at, 'validity', true);
 } else {
     $access_token_expired_text = "Expiry Date Not Available!";

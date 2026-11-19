@@ -37,15 +37,15 @@
          * @note Standard expiration time is 86400 seconds (24 hours)
          */
         public function get_refresh_token(){
-            $refresh_token = get_transient('ninja_van_refresh_token');
+            $tokens = nv_my_get_tokens();
 
             // Shouldn't happen but just in case...
-            if ($refresh_token && !empty($refresh_token)) {
+            if (nv_my_has_valid_refresh_token($tokens)) {
                 nv_my_log('Refresh Token already available!');
                 return [
                     'status' => false,
                     'message' => 'Refresh Token Available',
-                    'token' => $refresh_token,
+                    'token' => $tokens['refresh_token'],
                 ];
             }
 
@@ -75,15 +75,13 @@
                 )
             );
 
-            // Delete Old Access Token From Cache If Available (in case of a plugin auth mode change)
-            delete_transient('ninja_van_token');
-            delete_transient('ninja_van_token_expiry');
-            delete_transient('ninja_van_token_error');
-            delete_transient('ninja_van_refresh_token_error');
-             
-               
+            // Delete Old Access Token If Available (in case of a plugin auth mode change)
+            nv_my_update_tokens(['access_token' => '', 'access_expires' => 0]);
+            nv_my_clear_token_errors();
+
+
             if ( is_wp_error( $request )) {
-                set_transient( 'ninja_van_refresh_token_error', $request->get_error_message());
+                nv_my_set_token_error('refresh', $request->get_error_message());
                 
                 return [
                     'status' => false,
@@ -99,7 +97,7 @@
                     $message = $response->error->message;
                 }
 
-                set_transient( 'ninja_van_refresh_token_error', $message);
+                nv_my_set_token_error('refresh', $message);
 
                 return [
                     'status' => false,
@@ -115,8 +113,8 @@
                     $message = $response->message;
                 }
 
-                set_transient( 'ninja_van_refresh_token_error', $message);
-                
+                nv_my_set_token_error('refresh', $message);
+
                 return [
                     'status' => false,
                     'message' => $message,
@@ -145,7 +143,7 @@
                 }
 
                 if (!$response->refresh_token) {
-                    set_transient( 'ninja_van_refresh_token_error', 'Failed to obtain Refresh Token! (Bad Payload)' );
+                    nv_my_set_token_error('refresh', 'Failed to obtain Refresh Token! (Bad Payload)');
                     return [
                         'status' => false,
                         'message' => 'Failed To Obtain Refresh Token! Please Contact Ninja Van!',
@@ -153,9 +151,12 @@
                     ];
                 }
 
-                set_transient( 'ninja_van_token', $response->access_token, ($response->expires_in - 600) );
-                set_transient( 'ninja_van_token_expiry', $response->expires);
-                set_transient( 'ninja_van_refresh_token', $response->refresh_token, $response->expires_in );
+                nv_my_update_tokens([
+                    'access_token' => $response->access_token,
+                    'access_expires' => $response->expires,
+                    'refresh_token' => $response->refresh_token,
+                    'refresh_expires' => time() + $response->expires_in,
+                ]);
                 update_option( 'Ninja_Van_WooCommerce_AUTH_STATE', 1 ); // Connected
                 $this->schedule_cron();
 
@@ -170,8 +171,8 @@
                     $wp_body = json_encode($wp_body);
                 }
                 nv_my_log('Failed To Generate Refresh Token with status code ('.wp_remote_retrieve_response_code($request).') and message ('.$wp_body.')');
-                
-                set_transient( 'ninja_van_refresh_token_error', $wp_body);
+
+                nv_my_set_token_error('refresh', $wp_body);
 
                 return [
                     'status' => false,
@@ -188,22 +189,22 @@
          * @note Standard expiration time is 86400 seconds (24 hours)
          */
         public function get_access_token(){
-            $token = get_transient('ninja_van_token');
-            $refresh_token = get_transient('ninja_van_refresh_token');
+            $tokens = nv_my_get_tokens();
+            $refresh_token = nv_my_has_valid_refresh_token($tokens) ? $tokens['refresh_token'] : false;
 
-            if ($token && !empty($token)) {
+            if (nv_my_has_valid_access_token($tokens)) {
                 return [
                     'status' => true,
                     'message' => 'Access Token Available',
-                    'token' => $token,
+                    'token' => $tokens['access_token'],
                 ];
             }
 
             /**
              * If refresh token is not available, connection is expired (for PLUGIN API)
              */
-            if ($this->auth_mode == 'PLUGIN' && ( !$refresh_token || empty($refresh_token) )) {
-                set_transient( 'ninja_van_refresh_token_error', 'Session Expired! Please Login Again!');
+            if ($this->auth_mode == 'PLUGIN' && !$refresh_token) {
+                nv_my_set_token_error('refresh', 'Session Expired! Please Login Again!');
                 $this->schedule_cron(true);
                 return [
                     'status' => false,
@@ -238,12 +239,12 @@
                 )
             );
 
-            // Delete Old Access Token From Cache If Available
-            delete_transient('ninja_van_token');
-             
-               
+            // Delete Old Access Token If Available
+            nv_my_update_tokens(['access_token' => '']);
+
+
             if ( is_wp_error( $request )) {
-                set_transient( 'ninja_van_token_error', $request->get_error_message());
+                nv_my_set_token_error('access', $request->get_error_message());
                 
                 return [
                     'status' => false,
@@ -286,15 +287,18 @@
                     $response->expires = time() + $response->expires_in;
                 }
 
-                if (nv_my_get_config('auth_state') && !$response->refresh_token) {
-                    set_transient( 'ninja_van_refresh_token_error', 'Failed to obtain Refresh Token! (Bad Payload)' );
-                } else {
+                // Ninja Van issues a new refresh token on every refresh, and the previous one stops working.
+                // Keep the current refresh token only when the response does not include a new one.
+                if (empty($response->refresh_token)) {
                     $response->refresh_token = $refresh_token;
                 }
 
-                set_transient( 'ninja_van_token', $response->access_token, ($response->expires_in - 600));
-                set_transient( 'ninja_van_token_expiry', $response->expires);
-                set_transient( 'ninja_van_refresh_token', $response->refresh_token, $response->expires_in );
+                nv_my_update_tokens([
+                    'access_token' => $response->access_token,
+                    'access_expires' => $response->expires,
+                    'refresh_token' => (string) $response->refresh_token,
+                    'refresh_expires' => time() + $response->expires_in,
+                ]);
 
                 return [
                     'status' => true,
@@ -308,7 +312,7 @@
                 }
                 nv_my_log('Failed To Generate Refresh Token with status code ('.wp_remote_retrieve_response_code($request).') and message ('.$wp_body.')');
 
-                set_transient( 'ninja_van_token_error', $wp_body);
+                nv_my_set_token_error('access', $wp_body);
 
                 return [
                     'status' => false,
@@ -323,10 +327,8 @@
          * @scope Plugin API & Direct API
          */
         public function refresh_token(){
-            delete_transient('ninja_van_token');
-            delete_transient('ninja_van_token_expiry');
-            delete_transient('ninja_van_token_error');
-            delete_transient('ninja_van_refresh_token_error');
+            nv_my_update_tokens(['access_token' => '', 'access_expires' => 0]);
+            nv_my_clear_token_errors();
 
             return $this->get_access_token();
         }
@@ -365,7 +367,7 @@
             );
 
             if ( is_wp_error( $request )) {
-                set_transient( 'ninja_van_refresh_token_error', $request->get_error_message());
+                nv_my_set_token_error('refresh', $request->get_error_message());
 
                 return [
                     'status' => false,
@@ -401,13 +403,10 @@
          */
         public function disconnect(){
             $this->schedule_cron(true);
-            
-            delete_transient('ninja_van_token');
-            delete_transient('ninja_van_refresh_token');
-            delete_transient('ninja_van_token_expiry');
-            delete_transient('ninja_van_token_error');
-            delete_transient('ninja_van_refresh_token_error');
-            
+
+            nv_my_clear_tokens();
+            nv_my_clear_token_errors();
+
             update_option('Ninja_Van_WooCommerce_STATUS', false);
             update_option('Ninja_Van_WooCommerce_ACCESS_CODE', '');
             update_option('Ninja_Van_WooCommerce_AUTH_STATE', 0); 
