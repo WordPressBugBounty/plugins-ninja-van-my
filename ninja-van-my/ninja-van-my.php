@@ -3,7 +3,7 @@
  * Plugin Name: Ninja Van (MY)
  * Plugin URI: https://sites.google.com/ninjavan.co/woocommerce/
  * Description: Easily connect your WooCommerce store to your Ninja Van Dashboard for automatic tracking order creation and updates — no manual entry required!
- * Version: 1.1.8
+ * Version: 1.1.9
  * Author: Ninja Van Logistics Sdn Bhd
  * Author URI: https://www.ninjavan.co/
  * Text Domain: ninja-van-my
@@ -24,7 +24,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 final class Ninja_Van_MY {
 
-    CONST version = '1.1.8';
+    CONST version = '1.1.9';
 
     private function __construct() {
         if ( !in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', get_option( 'active_plugins' ) ) ) ) {
@@ -93,6 +93,14 @@ final class Ninja_Van_MY {
         define('Ninja_Van_MY_TOKENS_OPTION', 'Ninja_Van_WooCommerce_TOKENS');
         define('Ninja_Van_MY_TOKEN_ERRORS_OPTION', 'Ninja_Van_WooCommerce_TOKEN_ERRORS');
         define('Ninja_Van_MY_TOKEN_REFRESH_BUFFER', 600); // Seconds before expiry when the access token is renewed
+        // Site Health records: times, statuses and Ninja Van's messages only, never tokens or customer data
+        define('Ninja_Van_MY_HEALTH_OPTION', 'Ninja_Van_WooCommerce_HEALTH');
+        define('Ninja_Van_MY_HEALTH_LOG_OPTION', 'Ninja_Van_WooCommerce_HEALTH_LOG');
+        define('Ninja_Van_MY_HEALTH_LOG_LIMIT', 30);
+        define('Ninja_Van_MY_HEALTH_API_CALLS_LIMIT', 20);
+        define('Ninja_Van_MY_HEALTH_API_ERRORS_LIMIT', 10);
+        define('Ninja_Van_MY_HEALTH_PROBE', 'ninja_van_health_probe'); // A transient on purpose: it tests whether transients survive
+        define('Ninja_Van_MY_HEALTH_CRON_OVERDUE', 15 * 60); // The refresh runs every 5 minutes
     }
 
     public function check_woocommerce_installation(){
@@ -148,7 +156,10 @@ final class Ninja_Van_MY {
             add_action('admin_notices', [$this, 'check_legacy_plugin']);
             new Ninja\Van\MY\Admin();
         }
-        
+
+        // Records API calls, cron runs and webhooks in every context (web, cron, WP-CLI) for Site Health
+        new Ninja\Van\MY\Health();
+
         if (nv_my_get_config('auth_mode') == 'PLUGIN') {
             add_filter( 'cron_schedules', [$this, 'cron_schedules'] );
             add_action( 'ninja_van_refresh_token', 'nv_my_cron' );

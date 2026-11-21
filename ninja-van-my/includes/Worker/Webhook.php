@@ -309,6 +309,7 @@
                     'message' => "Order Not Found!",
                     'data' => []
                 ];
+                nv_my_health_record_webhook_outcome($ninjavan_status, $order_id, $response['message']);
                 return wp_send_json($response);
             }
 
@@ -321,6 +322,7 @@
                     'message' => "This Order has already been completed!",
                     'data' => []
                 ];
+                nv_my_health_record_webhook_outcome($ninjavan_status, $order_id, $response['message']);
                 return wp_send_json($response);
             }
 
@@ -335,6 +337,7 @@
                     'message' => "This Order has already been updated!",
                     'data' => []
                 ];
+                nv_my_health_record_webhook_outcome($ninjavan_status, $order_id, $response['message']);
                 return wp_send_json($response);
             }
 
@@ -421,6 +424,7 @@
                         'message' => "Nothing to do with this request!",
                         'data' => []
                     ];
+                    nv_my_health_record_webhook_outcome($ninjavan_status, $order_id, $response['message']);
                     return wp_send_json($response);
                     break;
             }
@@ -434,6 +438,7 @@
                     'ninjavan_status' => $ninjavan_status,
                 ]
             ];
+            nv_my_health_record_webhook_outcome($ninjavan_status, $order_id, $response['message']);
             return wp_send_json($response);
         }
     }

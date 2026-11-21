@@ -4,7 +4,7 @@ Tags: ninja van, ninjavan
 Requires at least: 5.6
 Tested up to: 6.6.1
 Requires PHP: 7.2
-Stable tag: 1.1.8
+Stable tag: 1.1.9
 License: GPL-3.0-or-later
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -171,6 +171,14 @@ Bug Updates
 * Fixes the Ninja Van connection dropping right after login on sites with a misconfigured object cache (such as Redis) or with transients suspended by another plugin. Connection tokens are now stored in the database instead of transients
 * Existing connections are moved over automatically. No need to reconnect after updating
 * Fixes the Ninja Van connection expiring after the second background token refresh. The plugin now keeps the new refresh token Ninja Van issues on every refresh
+
+= 1.1.9 =
+### What's New
+* Ninja Van checks in Tools → Site Health: the connection, the token refresh schedule, whether the site keeps saved data, recent Ninja Van API errors and webhooks. Each failed check says who can fix it
+* A "Ninja Van (MY)" section in Site Health → Info for Ninja Van support. It contains no tokens, secrets or customer details
+
+### Changes
+* "Had to reconnect many times?" on the settings page now opens Site Health
 
 == Screenshots ==
 

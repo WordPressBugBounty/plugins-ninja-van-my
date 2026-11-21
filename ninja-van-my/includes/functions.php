@@ -67,6 +67,8 @@
     }
 
     function nv_my_cron(){
+        nv_my_health_record_cron();
+
         $access_token = new AccessToken();
         $access_token->cron_get_access_token();
     }
@@ -2021,6 +2023,222 @@
 
     function nv_my_clear_token_errors(){
         delete_option(Ninja_Van_MY_TOKEN_ERRORS_OPTION);
+    }
+
+    /**
+     * Health records shown in Site Health
+     * Times, HTTP statuses and Ninja Van's error messages only. Never tokens, secrets or customer data.
+     */
+    function nv_my_health_get(){
+        $health = get_option(Ninja_Van_MY_HEALTH_OPTION, []);
+
+        return is_array($health) ? $health : [];
+    }
+
+    function nv_my_health_set($key, $value){
+        $health = nv_my_health_get();
+        $health[$key] = $value;
+
+        update_option(Ninja_Van_MY_HEALTH_OPTION, $health, false);
+    }
+
+    /**
+     * Add an entry to a list kept in the health record, newest first
+     */
+    function nv_my_health_push($key, $entry, $limit){
+        $health = nv_my_health_get();
+        $list = (isset($health[$key]) && is_array($health[$key])) ? $health[$key] : [];
+
+        array_unshift($list, $entry);
+        $health[$key] = array_slice($list, 0, $limit);
+
+        update_option(Ninja_Van_MY_HEALTH_OPTION, $health, false);
+    }
+
+    /**
+     * Where the current code runs: support needs to know whether cron runs from WP-CLI or a page load
+     */
+    function nv_my_health_source(){
+        if (defined('WP_CLI') && WP_CLI) {
+            return 'WP-CLI';
+        }
+
+        if (wp_doing_cron()) {
+            return 'WP-Cron';
+        }
+
+        if (wp_doing_ajax()) {
+            return 'admin-ajax';
+        }
+
+        return is_admin() ? 'wp-admin' : 'web';
+    }
+
+    function nv_my_health_log($type, $summary){
+        $log = get_option(Ninja_Van_MY_HEALTH_LOG_OPTION, []);
+        $log = is_array($log) ? $log : [];
+
+        array_unshift($log, [
+            'time' => time(),
+            'type' => $type,
+            'summary' => nv_my_health_redact($summary),
+            'source' => nv_my_health_source(),
+        ]);
+
+        update_option(Ninja_Van_MY_HEALTH_LOG_OPTION, array_slice($log, 0, Ninja_Van_MY_HEALTH_LOG_LIMIT), false);
+    }
+
+    function nv_my_health_get_log(){
+        $log = get_option(Ninja_Van_MY_HEALTH_LOG_OPTION, []);
+
+        return is_array($log) ? $log : [];
+    }
+
+    /**
+     * Remove any token or secret from text before it is stored
+     */
+    function nv_my_health_redact($text){
+        $tokens = nv_my_get_tokens();
+        $secrets = array_filter([$tokens['access_token'], $tokens['refresh_token'], nv_my_get_config('client_secret')]);
+
+        return str_replace($secrets, '[redacted]', (string) $text);
+    }
+
+    /**
+     * Ninja Van's error message from a response body, in a few words
+     * The token endpoint nests its OAuth error as JSON inside error.message.
+     */
+    function nv_my_health_api_error($body){
+        $response = json_decode((string) $body, true);
+
+        if (!is_array($response)) {
+            return substr(wp_strip_all_tags((string) $body), 0, 200);
+        }
+
+        $message = '';
+        if (isset($response['error']) && is_array($response['error'])) {
+            $message = isset($response['error']['message']) ? $response['error']['message'] : (isset($response['error']['title']) ? $response['error']['title'] : '');
+        } else if (isset($response['message'])) {
+            $message = $response['message'];
+        }
+
+        $nested = json_decode((string) $message, true);
+        if (is_array($nested) && isset($nested['error_description'])) {
+            $message = $nested['error_description'];
+        }
+
+        return nv_my_health_redact(substr((string) $message, 0, 200));
+    }
+
+    /**
+     * Record every Ninja Van API call. Hooked to http_api_debug, which WordPress fires after each remote request
+     */
+    function nv_my_health_record_api_call($response, $context, $class, $args, $url){
+        $host = (string) wp_parse_url($url, PHP_URL_HOST);
+        if (substr($host, -strlen('ninjavan.co')) !== 'ninjavan.co') {
+            return;
+        }
+
+        $path = (string) wp_parse_url($url, PHP_URL_PATH);
+        $method = strtoupper(isset($args['method']) ? $args['method'] : 'GET');
+
+        if (is_wp_error($response)) {
+            $status = 0;
+            $error = nv_my_health_redact($response->get_error_message());
+        } else {
+            $status = (int) wp_remote_retrieve_response_code($response);
+            $error = ($status >= 200 && $status < 300) ? '' : nv_my_health_api_error(wp_remote_retrieve_body($response));
+        }
+
+        $call = [
+            'time' => time(),
+            'method' => $method,
+            'path' => $path,
+            'status' => $status,
+            'error' => $error,
+        ];
+
+        nv_my_health_push('api_calls', $call, Ninja_Van_MY_HEALTH_API_CALLS_LIMIT);
+        if ($error !== '' || $status === 0) {
+            nv_my_health_push('api_errors', $call, Ninja_Van_MY_HEALTH_API_ERRORS_LIMIT);
+        }
+
+        if (substr($path, -strlen('/oauth/token')) === '/oauth/token') {
+            nv_my_health_record_token_response($response, $args, $status, $error);
+        }
+    }
+
+    /**
+     * Login and refresh outcomes. Reads only which fields Ninja Van returned, never their values
+     */
+    function nv_my_health_record_token_response($response, $args, $status, $error){
+        $request = (isset($args['body']) && is_string($args['body'])) ? json_decode($args['body'], true) : [];
+        $is_login = is_array($request) && isset($request['grant_type']) && $request['grant_type'] === 'authorization_code';
+
+        if ($status !== 200) {
+            nv_my_health_set('refresh_error', [
+                'time' => time(),
+                'status' => $status,
+                'message' => $error,
+                'login' => $is_login,
+            ]);
+            nv_my_health_log($is_login ? 'login_failed' : 'refresh_failed', 'HTTP ' . $status . ($error !== '' ? ': ' . $error : ''));
+            return;
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $expires_in = (is_array($body) && isset($body['expires_in'])) ? (int) $body['expires_in'] : 0;
+
+        nv_my_health_set($is_login ? 'login' : 'refresh', [
+            'time' => time(),
+            'expires_in' => $expires_in,
+            'new_refresh_token' => is_array($body) && !empty($body['refresh_token']),
+        ]);
+        nv_my_health_log($is_login ? 'login' : 'refresh', 'Tokens valid for ' . round($expires_in / HOUR_IN_SECONDS) . ' hours');
+    }
+
+    /**
+     * Each token-refresh cron run writes a probe transient. If it is gone on a later request before it
+     * expires, this site loses saved data (a broken object cache, or a plugin deleting transients).
+     */
+    function nv_my_health_record_cron(){
+        set_transient(Ninja_Van_MY_HEALTH_PROBE, time(), HOUR_IN_SECONDS);
+
+        nv_my_health_set('probe', ['time' => time()]);
+        nv_my_health_set('cron', ['time' => time(), 'source' => nv_my_health_source()]);
+    }
+
+    /**
+     * Once per login: this branch runs on every page load while the store is disconnected
+     */
+    function nv_my_health_record_session_expired(){
+        $health = nv_my_health_get();
+        $last_connected = max(
+            isset($health['login']['time']) ? (int) $health['login']['time'] : 0,
+            isset($health['refresh']['time']) ? (int) $health['refresh']['time'] : 0
+        );
+
+        if (isset($health['session_expired']['time']) && (int) $health['session_expired']['time'] >= $last_connected) {
+            return;
+        }
+
+        nv_my_health_set('session_expired', ['time' => time()]);
+        nv_my_health_log('session_expired', 'No valid refresh token: the store must log in to Ninja Van again');
+    }
+
+    function nv_my_health_record_webhook_rejected($reason){
+        nv_my_health_push('webhook_rejections', ['time' => time(), 'reason' => $reason], Ninja_Van_MY_HEALTH_API_ERRORS_LIMIT);
+        nv_my_health_log('webhook_rejected', $reason);
+    }
+
+    function nv_my_health_record_webhook_outcome($status, $order_id, $outcome){
+        nv_my_health_set('webhook_received', [
+            'time' => time(),
+            'status' => $status,
+            'order_id' => (int) $order_id,
+            'outcome' => $outcome,
+        ]);
+        nv_my_health_log('webhook', $status . ' for order #' . (int) $order_id . ': ' . $outcome);
     }
 
     function nv_my_token($reset = false){

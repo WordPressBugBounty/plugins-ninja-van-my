@@ -236,9 +236,9 @@ if ($store_default_country == 'MY') {
                                 }
                             ?>
                             <input type="text" name="access_code" id="access_code" class="regular-text" value="<?php echo esc_attr($plugin_status); ?>" readonly>
-                            <?php if (!empty($access_code) && !$refresh_token && is_using_wp_cron()) : ?>
+                            <?php if (!empty($access_code) && !$refresh_token) : ?>
                             <div class="text-center ninja_van_tooltip">
-                                <?php printf('<a href="%s" target="_blank" class="text-warning">%s</a>', esc_url('https://www.siteground.com/tutorials/wordpress/real-cron-job/') , esc_html(__('Had to reconnect many times?', 'ninja-van-my'))); ?><span class="ninja_van_tooltip_text"><?php esc_html_e(__('The Ninja Van plugin requires Cron for a stable connection. WordPress Cron depends on site visits, which can be unreliable for sites with few visitors. For consistent performance, configure a real Cron Job.', 'ninja-van-my')); ?></span>
+                                <?php printf('<a href="%s" class="text-warning">%s</a>', esc_url(admin_url('site-health.php')), esc_html(__('Had to reconnect many times?', 'ninja-van-my'))); ?><span class="ninja_van_tooltip_text"><?php esc_html_e(__('Tools → Site Health shows why the connection dropped: the token refresh schedule, saved-data problems on this site and Ninja Van\'s last error. Ninja Van support can ask for its Info tab.', 'ninja-van-my')); ?></span>
                             </div>
                             <?php endif; ?>
                         </td>

@@ -172,6 +172,7 @@
                                     'message' => "Invalid Token!",
                                     'data' => []
                                 ];
+                                nv_my_health_record_webhook_rejected('Missing signature header');
         
                                 return wp_send_json($response);
                             }
@@ -184,6 +185,7 @@
                                     'message' => "Invalid Request!",
                                     'data' => []
                                 ];
+                                nv_my_health_record_webhook_rejected('Unreadable body');
         
                                 return wp_send_json($response);
                             }
@@ -195,6 +197,7 @@
                                 'message' => "Invalid Security Code!",
                                 'data' => []
                             ];
+                            nv_my_health_record_webhook_rejected('Wrong security code');
         
                             return wp_send_json($response);
                         }
@@ -241,6 +244,7 @@
                     'message' => "Invalid Request: Order Reference, Tracking ID and Status is required!",
                     'data' => []
                 ];
+                nv_my_health_record_webhook_rejected('Missing order reference, tracking ID or status');
 
                 return wp_send_json($response);
             }

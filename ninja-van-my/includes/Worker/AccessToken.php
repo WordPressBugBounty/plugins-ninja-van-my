@@ -205,6 +205,7 @@
              */
             if ($this->auth_mode == 'PLUGIN' && !$refresh_token) {
                 nv_my_set_token_error('refresh', 'Session Expired! Please Login Again!');
+                nv_my_health_record_session_expired();
                 $this->schedule_cron(true);
                 return [
                     'status' => false,
@@ -406,6 +407,7 @@
 
             nv_my_clear_tokens();
             nv_my_clear_token_errors();
+            nv_my_health_log('disconnected', 'Disconnected from Ninja Van');
 
             update_option('Ninja_Van_WooCommerce_STATUS', false);
             update_option('Ninja_Van_WooCommerce_ACCESS_CODE', '');
